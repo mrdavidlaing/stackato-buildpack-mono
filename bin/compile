@@ -152,7 +152,7 @@ MONO_BIN="\${BASE_DIR}/runtimes/mono/bin/mono"
 MONO_VERSION=\$(\${MONO_BIN} --version | head -n 1)
 
 echo "-----> Ensuring Mono has latest SSL root certificates from Mozilla..."
-"\${MONO_BIN}" "\${BASE_DIR}/runtimes/mono/lib/mono/4.5/mozroots.exe" --import 
+"\${MONO_BIN}" "\${BASE_DIR}/runtimes/mono/lib/mono/4.5/mozroots.exe" --import --quiet
 
 echo "-----> Starting \${MONO_VERSION}" 
 nohup "\${MONO_BIN}" \${BASE_DIR}/bin/ConsoleRunner.exe > "\${BASE_DIR}/logs/consolerunner.log"&
