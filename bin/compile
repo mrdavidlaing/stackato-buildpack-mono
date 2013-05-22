@@ -92,7 +92,8 @@ cat >bin/setup.sh <<EOF
 cd "\${BASE_DIR}"
 
 echo "-----> Writing config files..."
-/usr/bin/erb1.8 config/nginx/nginx.conf.erb > runtimes/nginx/conf/nginx.conf
+/usr/bin/erb config/nginx/nginx.conf.erb > runtimes/nginx/conf/nginx.conf
+/usr/bin/erb config/nginx/app.conf.erb > runtimes/nginx/conf/app.conf
 
 echo "-----> Ensuring \${BASE_DIR}/public/index.html exists"
 if [ ! -f \${BASE_DIR}/public/index.html ]; then
