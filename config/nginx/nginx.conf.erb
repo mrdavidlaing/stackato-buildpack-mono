@@ -1,0 +1,52 @@
+# setting worker_processes to CPU core count
+worker_processes      <%=`cat /proc/cpuinfo | grep processor | wc -l`.to_i%>;
+daemon off;
+
+events {
+  worker_connections  1024;
+  use epoll;
+
+  # Accept as many connections as possible.
+  multi_accept on;
+}
+
+http {
+  # server
+  root              <%=ENV['BASE_DIR']%>/public;
+  index             index.php;
+
+  #logs
+  access_log <%=ENV['BASE_DIR']%>/logs/access.log;
+  error_log <%=ENV['BASE_DIR']%>/logs/error.log;
+
+  #misc
+  include             mime.types;
+  default_type        application/octet-stream;
+
+  sendfile            on;
+  port_in_redirect    off;
+
+  # timeouts
+  client_body_timeout   60;
+  client_header_timeout 60;
+  keepalive_timeout     65;
+  send_timeout          60;
+
+  # Latest https://www.cloudflare.com/ips-v4
+  set_real_ip_from    204.93.240.0/24;
+  set_real_ip_from    204.93.177.0/24;
+  set_real_ip_from    199.27.128.0/21;
+  set_real_ip_from    173.245.48.0/20;
+  set_real_ip_from    103.21.244.0/22;
+  set_real_ip_from    103.22.200.0/22;
+  set_real_ip_from    103.31.4.0/22;
+  set_real_ip_from    141.101.64.0/18;
+  set_real_ip_from    108.162.192.0/18;
+  set_real_ip_from    190.93.240.0/20;
+  set_real_ip_from    188.114.96.0/20;
+  set_real_ip_from    197.234.240.0/22;
+  set_real_ip_from    198.41.128.0/17;
+  real_ip_header      X-Forwarded-For;
+
+  include wordpress.conf;
+}

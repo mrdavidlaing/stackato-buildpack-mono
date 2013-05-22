@@ -1,0 +1,139 @@
+#!/bin/bash
+# Usage: bin/compile <build-dir> <cache-dir>
+
+set -e
+set -o pipefail
+
+# START CONFIG
+MONO_VERSION=3.0.10
+DOWNLOAD_TIMEOUT_SEC=3600
+S3_BUCKET=https://s3-eu-west-1.amazonaws.com/ci-vagrantboxes
+#
+MONO_URL="${S3_BUCKET}/mono-${HIPHOP_VERSION}.tar.gz"
+# END CONFIG
+
+# parse and derive params
+BUILDPACK_DIR=$(cd $(dirname $0); cd ..; pwd) # absolute path of buildpack
+BUILD_DIR=$1
+CACHE_DIR=$2
+HELP=$'\e[1;33m=-=-=-=-= bin/compile =-=-=-=-=\nAdd Mono and Nginx runtimes and configuration to files in <build-dir> so they can be served by Stackato.\nDownloaded assets are cached in <cache-dir>.\nMust be called like this:\nbin/compile <build-dir> <cache-dir>\e[00m'
+if [[ -z "${BUILD_DIR}" ]]; then
+  echo -e "\e[00;31mError: You must pass a valid <build-dir>"
+  echo -e "$HELP"
+  exit 1
+fi
+if [[ -z "$CACHE_DIR" ]]; then
+  echo -e "\e[00;31mError: You must pass a valid <cache-dir>"
+  echo -e "$HELP"
+  exit 1
+fi
+
+echo "-----> compile params: BUILDPACK_DIR: ${BUILDPACK_DIR} BUILD_DIR: ${BUILD_DIR} CACHE_DIR:$CACHE_DIR"
+
+function indent() {
+  c='s/^/       /'
+  case $(uname) in
+    Darwin) sed -l "$c";;
+    *)      sed -u "$c";;
+  esac
+}
+
+#Ensure folders exist
+mkdir -p "$CACHE_DIR"
+mkdir -p "${BUILD_DIR}/runtimes"
+
+#normalize paths
+BUILD_DIR=$(cd "${BUILD_DIR}";pwd) 
+CACHE_DIR=$(cd "${CACHE_DIR}";pwd)
+#
+CACHED_MONO_DOWNLOAD="${CACHE_DIR}/mono-${MONO_VERSION}.tar.gz"
+
+echo "-----> Installing MONO v${MONO_VERSION}"
+if [ ! -f "${CACHED_MONO_DOWNLOAD}" ]; then
+  echo "Downloading $MONO_URL to cache: ${CACHED_MONO_DOWNLOAD}" | indent
+  curl --max-time $DOWNLOAD_TIMEOUT_SEC --location $MONO_URL > "${CACHED_MONO_DOWNLOAD}"
+fi
+if [ ! -d "${BUILD_DIR}/runtimes/mono" ]; then
+   echo "Extracting ${CACHED_MONO_DOWNLOAD} to ${BUILD_DIR}/runtimes/mono" | indent
+   tar -xz --directory "${BUILD_DIR}/runtimes" -f "${CACHED_MONO_DOWNLOAD}"
+else
+  echo "${BUILD_DIR}/runtimes/mono already configured" | indent
+fi
+
+echo "-----> Copying config templates"
+cp -Rf "${BUILDPACK_DIR}/config" "${BUILD_DIR}" | indent
+
+echo "-----> Creating bin/ scripts"
+mkdir -p "${BUILD_DIR}/bin"
+cd "${BUILD_DIR}"
+
+# Setup
+echo "Writing setup.sh script" | indent
+cat >bin/setup.sh <<EOF
+#!/usr/bin/env bash
+
+cd "\${BASE_DIR}"
+
+echo "-----> Writing config files..."
+#erb config/nginx/nginx.conf.erb > runtimes/nginx/conf/nginx.conf
+
+mkdir -p \${BASE_DIR}/logs
+touch "\${BASE_DIR}/logs/access.log" "\${BASE_DIR}/logs/error.log"
+echo "-----> Logs are:"
+find "\${BASE_DIR}/logs" -name *.log
+
+EOF
+chmod +x bin/setup.sh
+
+# Startup
+echo "Writing start.sh script" | indent
+cat >bin/start.sh <<EOF
+#!/usr/bin/env bash
+HELP="bin/start {loglevel}"
+
+if [[ -n "\$2" ]]; then
+  export LOGLEVEL=\$(echo \$2 | tr [:lower:] [:upper:])
+else
+  export LOGLEVEL="ERROR"
+fi
+
+export BASE_DIR=\$(cd \$(dirname \$0); cd ..; pwd) # absolute path
+echo "-----> BASE_DIR: \${BASE_DIR}"
+cd "\${BASE_DIR}"
+
+bin/setup.sh
+
+KILL_ALL="echo '-----> Cleanup orphaned processes...' && killall -q tail mono"
+eval \${KILL_ALL}
+# When this exits, exit all back ground process too.
+trap 'eval \${KILL_ALL}' EXIT
+
+echo "-----> Using LOGLEVEL: \$LOGLEVEL [options: Error (default) | Warning | Info | Verbose | Debug ]"
+
+(tail -q -n 0 -F "\${BASE_DIR}/logs/access.log" -F "\${BASE_DIR}/logs/error.log" &)
+
+BUILDPACK_LOCALE="en_US.UTF-8"
+echo "-----> Setting locale: \$BUILDPACK_LOCALE"
+export LANG=\$BUILDPACK_LOCALE
+export LANGUAGE=\$BUILDPACK_LOCALE
+export LC_ALL=\$BUILDPACK_LOCALE
+
+MONO_PREFIX=\${BASE_DIR}/runtimes/mono
+export DYLD_LIBRARY_FALLBACK_PATH=\$MONO_PREFIX/lib:\$DYLD_LIBRARY_FALLBACK_PATH
+export LD_LIBRARY_PATH=\$MONO_PREFIX/lib:\$LD_LIBRARY_PATH
+export C_INCLUDE_PATH=\$MONO_PREFIX/include
+export ACLOCAL_PATH=\$MONO_PREFIX/share/aclocal
+export PKG_CONFIG_PATH=\$MONO_PREFIX/lib/pkgconfig:
+export PATH=\$MONO_PREFIX/bin:\$PATH
+
+MONO_BIN="\${BASE_DIR}/runtimes/mono/bin/mono"
+MONO_VERSION=\$(\${MONO_BIN} --version | head -n 1)
+
+echo "-----> Starting \${MONO_VERSION}" 
+"\${MONO_BIN}" \${BASE_DIR}/bin/ConsoleRunner.exe
+
+EOF
+
+chmod +x bin/start.sh
+
+echo "-----> Done with compile"

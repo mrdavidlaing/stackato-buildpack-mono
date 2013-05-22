@@ -1,0 +1,50 @@
+#!/bin/bash
+
+set -e
+
+if [ -z "$NGINX_VERSION" ]; then
+  echo -e "\e[00;31mError: Must set NGINX_VERSION, i.e NGINX_VERSION=1.2.6"
+  exit 1
+fi
+
+if [[ -z "$BUILDPACK_CACHE" ]]; then
+  echo -e "\e[00;31mError: Must pass a valid BUILDPACK_CACHE - eg: BUILDPACK_CACHE=~/.buildpack-cache"
+  exit 1
+fi
+
+#ensure a clean compile location
+rm -rf /app/runtimes/nginx
+
+PCRE_VERSION=8.32
+
+basedir="$( cd -P "$( dirname "$0" )" && pwd )"
+
+# make a temp directory
+tempdir="$( mktemp -t nginx_XXXX )"
+rm -rf $tempdir
+mkdir -p $tempdir
+pushd $tempdir
+
+# download and extract nginx
+curl http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz -o nginx.tgz
+tar xzvf nginx.tgz
+
+# download and extract pcre into contrib directory
+pushd nginx-$NGINX_VERSION/contrib
+curl ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre-${PCRE_VERSION}.tar.gz -o pcre.tgz
+tar zvxf pcre.tgz
+popd
+
+# build and package nginx 
+pushd $tempdir/nginx-$NGINX_VERSION
+./configure --prefix=/app/runtimes/nginx \
+               --with-pcre=contrib/pcre-${PCRE_VERSION} \
+               --with-http_stub_status_module \
+               --with-http_realip_module \
+               && make install
+popd
+tar --transform='s,^app/runtimes/,,' -czf nginx-$NGINX_VERSION.tar.gz /app/runtimes/nginx/
+
+mv $(pwd)/nginx-$NGINX_VERSION.tar.gz ${BUILDPACK_CACHE}
+
+echo "Successfully finished building nginx to ${BUILDPACK_CACHE}/nginx-$NGINX_VERSION.tar.gz"

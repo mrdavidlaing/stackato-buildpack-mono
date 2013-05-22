@@ -1,0 +1,37 @@
+#!/bin/bash
+MONO_VERSION=3.0.10
+
+sudo apt-get update
+sudo apt-get install -y g++ libtool gettext pkg-config automake
+pushd /tmp
+
+# Build from tarball
+# sudo curl -k --location -o mono-${MONO_VERSION}.tar.bz2 http://origin-download.mono-project.com/sources/mono/mono-${MONO_VERSION}.tar.bz2
+#tar -xvjpf mono-${MONO_VERSION}.tar.bz2
+#cd mono-${MONO_VERSION}
+#./configure --prefix=/app/runtimes/mono
+#make
+#sudo make install
+
+#Build from git
+git clone git://github.com/mono/mono.git mono-git
+cd mono-git
+git checkout mono-${MONO_VERSION}
+git submodule init
+git submodule update --recursive
+
+./autogen.sh --prefix=/app/runtimes/mono
+make get-monolite-latest
+make EXTERNAL_MCS="${PWD}/mcs/class/lib/monolite/gmcs.exe"
+
+sudo mkdir -p /app
+sudo chown vagrant:vagrant /app
+make install
+
+tar --transform='s,^app/runtimes/,,' -czf mono-$MONO_VERSION.tar.gz /app/runtimes/mono/
+
+mkdir /tmp/buildpack-cache
+mv $(pwd)/mono-$MONO_VERSION.tar.gz /tmp/buildpack-cache
+
+
+popd

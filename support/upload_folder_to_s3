@@ -1,0 +1,39 @@
+#!/bin/bash
+
+basedir="$( cd -P "$( dirname "$0" )" && pwd )"
+
+if [ -z "$1" ]; then
+  echo "must specify folder to upload as first arg"
+  exit 1
+fi
+
+if [ -z "$2" ]; then
+  echo "must specify s3 bucket as second argument"
+  exit 1
+fi
+S3_BUCKET=$2
+
+echo "Reconfigure S3 credentials by running s3cmd --configure"
+echo "Uploading files from $(pwd) to $S3_BUCKET"
+
+sudo apt-get install s3cmd -y | tail -n 1
+
+pushd $1
+
+for file in * 
+do
+    if test -f "$file"; then
+    	echo "--------------------------------"
+    	echo "Upload $file?"
+			select yn in "Yes" "No"; do
+			    case $yn in
+			        Yes ) s3cmd -H -P -M put $file s3://${S3_BUCKET}; break;;
+			        No ) echo "Skipping $file"; break;
+			    esac
+			done
+    fi
+done
+
+echo "DONE!"
+
+popd

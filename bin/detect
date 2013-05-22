@@ -1,0 +1,9 @@
+#!/bin/sh
+# Usage: bin/detect <build-dir>
+
+if [ -f $1/bin/ConsoleRunner.exe ]; then
+  echo "Mono on Stackato"
+  exit 0
+else
+  exit 1
+fi
