@@ -7,5 +7,5 @@ config_vars:
   FOO_CONFIG_VAR : true
   BAR_CONFIG_VAR : baz
 default_process_types:
-  web: echo "There isn't a web process" &
+  web: bin/start.sh Error
 EOF
