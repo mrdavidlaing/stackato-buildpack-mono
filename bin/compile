@@ -9,7 +9,7 @@ MONO_VERSION=3.0.10
 DOWNLOAD_TIMEOUT_SEC=3600
 S3_BUCKET=https://s3-eu-west-1.amazonaws.com/ci-vagrantboxes
 #
-MONO_URL="${S3_BUCKET}/mono-${HIPHOP_VERSION}.tar.gz"
+MONO_URL="${S3_BUCKET}/mono-${MONO_VERSION}.tar.gz"
 # END CONFIG
 
 # parse and derive params
