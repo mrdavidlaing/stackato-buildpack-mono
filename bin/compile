@@ -71,6 +71,8 @@ fi
 if [ ! -d "${BUILD_DIR}/runtimes/mono" ]; then
    echo "Extracting ${CACHED_MONO_DOWNLOAD} to ${BUILD_DIR}/runtimes/mono" | indent
    tar -xz --directory "${BUILD_DIR}/runtimes" -f "${CACHED_MONO_DOWNLOAD}"
+   echo "Caching Mozilla certs data"
+   curl --max-time $DOWNLOAD_TIMEOUT_SEC --location http://mxr.mozilla.org/seamonkey/source/security/nss/lib/ckfw/builtins/certdata.txt?raw=1 > "${BUILD_DIR}/runtimes/mono/mozilla_certsdata.txt"
 else
   echo "${BUILD_DIR}/runtimes/mono already configured" | indent
 fi
@@ -150,7 +152,7 @@ MONO_BIN="\${BASE_DIR}/runtimes/mono/bin/mono"
 MONO_VERSION=\$(\${MONO_BIN} --version | head -n 1)
 
 echo "-----> Ensuring Mono has latest SSL root certificates from Mozilla..."
-"\${MONO_BIN}" "\${BASE_DIR}/runtimes/mono/lib/mono/4.5/mozroots.exe" --import --ask-remove 
+"\${MONO_BIN}" "\${BASE_DIR}/runtimes/mono/lib/mono/4.5/mozroots.exe" --import --file ${BUILD_DIR}/runtimes/mono/mozilla_certsdata.txt 
 
 echo "-----> Starting \${MONO_VERSION}" 
 nohup "\${MONO_BIN}" \${BASE_DIR}/bin/ConsoleRunner.exe > "\${BASE_DIR}/logs/consolerunner.log"&
