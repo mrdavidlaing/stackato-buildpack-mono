@@ -6,10 +6,12 @@ set -o pipefail
 
 # START CONFIG
 MONO_VERSION=3.0.10
+NGINX_VERSION=1.2.6
 DOWNLOAD_TIMEOUT_SEC=3600
 S3_BUCKET=https://s3-eu-west-1.amazonaws.com/ci-vagrantboxes
 #
 MONO_URL="${S3_BUCKET}/mono-${MONO_VERSION}.tar.gz"
+NGINX_URL="https://s3.amazonaws.com/ci-stackato-buildpack-wordpress/nginx-${NGINX_VERSION}.tar.gz"
 # END CONFIG
 
 # parse and derive params
@@ -47,6 +49,19 @@ BUILD_DIR=$(cd "${BUILD_DIR}";pwd)
 CACHE_DIR=$(cd "${CACHE_DIR}";pwd)
 #
 CACHED_MONO_DOWNLOAD="${CACHE_DIR}/mono-${MONO_VERSION}.tar.gz"
+CACHED_NGINX_DOWNLOAD="${CACHE_DIR}/nginx-${NGINX_VERSION}.tar.gz"
+
+echo "-----> Installing Nginx v${NGINX_VERSION}"
+if [ ! -f "${CACHED_NGINX_DOWNLOAD}" ]; then
+  echo "Downloading $NGINX_URL to cache: ${CACHED_NGINX_DOWNLOAD}" | indent
+  curl --max-time $DOWNLOAD_TIMEOUT_SEC --location $NGINX_URL > "${CACHED_NGINX_DOWNLOAD}"
+fi
+if [ ! -d "${BUILD_DIR}/runtimes/nginx" ]; then
+   echo "Extracting ${CACHED_NGINX_DOWNLOAD} to ${BUILD_DIR}/runtimes/nginx" | indent
+   tar -xz --directory "${BUILD_DIR}/runtimes" -f "${CACHED_NGINX_DOWNLOAD}"
+else
+  echo "${BUILD_DIR}/runtimes/nginx already configured" | indent
+fi
 
 echo "-----> Installing MONO v${MONO_VERSION}"
 if [ ! -f "${CACHED_MONO_DOWNLOAD}" ]; then
@@ -75,10 +90,10 @@ cat >bin/setup.sh <<EOF
 cd "\${BASE_DIR}"
 
 echo "-----> Writing config files..."
-#erb config/nginx/nginx.conf.erb > runtimes/nginx/conf/nginx.conf
+/usr/bin/erb1.8 config/nginx/nginx.conf.erb > runtimes/nginx/conf/nginx.conf
 
 mkdir -p \${BASE_DIR}/logs
-touch "\${BASE_DIR}/logs/access.log" "\${BASE_DIR}/logs/error.log"
+touch "\${BASE_DIR}/logs/access.log" "\${BASE_DIR}/logs/error.log" "\${BASE_DIR}/logs/consolerunner.log"
 echo "-----> Logs are:"
 find "\${BASE_DIR}/logs" -name *.log
 
@@ -89,8 +104,13 @@ chmod +x bin/setup.sh
 echo "Writing start.sh script" | indent
 cat >bin/start.sh <<EOF
 #!/usr/bin/env bash
-HELP="bin/start {loglevel}"
-
+HELP="bin/start {port} {loglevel}"
+if [[ -n "\$1" ]]; then
+  export PORT=\$1
+else
+  echo \$HELP
+  exit 1
+fi
 if [[ -n "\$2" ]]; then
   export LOGLEVEL=\$(echo \$2 | tr [:lower:] [:upper:])
 else
@@ -110,7 +130,7 @@ trap 'eval \${KILL_ALL}' EXIT
 
 echo "-----> Using LOGLEVEL: \$LOGLEVEL [options: Error (default) | Warning | Info | Verbose | Debug ]"
 
-(tail -q -n 0 -F "\${BASE_DIR}/logs/access.log" -F "\${BASE_DIR}/logs/error.log" &)
+(tail -q -n 0 -F "\${BASE_DIR}/logs/access.log" -F "\${BASE_DIR}/logs/error.log" -F "\${BASE_DIR}/logs/consolerunner.log" &)
 
 BUILDPACK_LOCALE="en_US.UTF-8"
 echo "-----> Setting locale: \$BUILDPACK_LOCALE"
@@ -133,7 +153,11 @@ echo "-----> Ensuring Mono has latest SSL root certificates from Mozilla..."
 "\${MONO_BIN}" "\${BASE_DIR}/runtimes/mono/lib/mono/4.5/mozroots.exe" --import --ask-remove 
 
 echo "-----> Starting \${MONO_VERSION}" 
-"\${MONO_BIN}" \${BASE_DIR}/bin/ConsoleRunner.exe
+nohup "\${MONO_BIN}" \${BASE_DIR}/bin/ConsoleRunner.exe > "\${BASE_DIR}/logs/consolerunner.log"&
+
+NGINX_BIN="\${BASE_DIR}/runtimes/nginx/sbin/nginx"
+echo "-----> Starting \$(\${NGINX_BIN} -v 2>&1) on port \${PORT}" 
+"\${NGINX_BIN}" -p "\${BASE_DIR}/runtimes/nginx"
 
 EOF
 
